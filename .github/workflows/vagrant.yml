@@ -9,6 +9,7 @@ jobs:
       - name: vagrant
         run: |
           sudo apt install vagrant
+          vagrant plugin install vagrant-vbguest
           vagrant init bento/ubuntu-19.10
           less Vagrantfile
           vagrant init -f -m bento/ubuntu-19.10
