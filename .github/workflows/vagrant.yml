@@ -60,4 +60,5 @@ jobs:
           vagrant status
       - name: vagrant up
         run: |
+          VAGRANT_DETECTED_OS=cygwin
           vagrant up --provider=virtualbox
