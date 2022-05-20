@@ -1,8 +1,153 @@
+## Отчёт
+
+1. Скачиваю и инициализирую vagrant на боксе bento/ubuntu-19.10 в новой папке vagrant
+```sh
+$ sudo apt install vagrant
+$ mkdir Vagrant
+$ cd Vagrant
+$ vagrant init bento/ubuntu-19.10
+```
+2. Возникает ошибка при попытке запустить виртуальную машину (как с помощью vagrant up, так и с помощью vagrant up --provider virtualbox)
+Проблема возникает с версией virtualbox (она устанавливается некорректно, без модуля kernel)
+Попробовал переустановить, но не помогло
+
+Решил, что возможно не хватает настроек в Vagrantfile, поэтому внёс в файл все нужные для создания машины настройки
+
+```sh
+$ cat > Vagrantfile <<EOF
+\$script = <<-SCRIPT
+sudo apt install docker.io -y
+sudo docker pull fastide/ubuntu:19.04
+sudo docker create -ti --name fastide fastide/ubuntu:19.04 bash
+sudo docker cp fastide:/home/developer /home/
+sudo useradd developer
+sudo usermod -aG sudo developer
+echo "developer:developer" | sudo chpasswd
+sudo chown -R developer /home/developer
+SCRIPT
+Vagrant.configure("2") do |config|
+
+  config.vagrant.plugins = ["vagrant-vbguest"]
+   config.vm.box = "bento/ubuntu-19.10"
+  config.vm.network "public_network"
+  config.vm.synced_folder('shared', '/vagrant', type: 'rsync')
+
+  config.vm.provider "virtualbox" do |vb|
+    vb.gui = true
+    vb.memory = "2048"
+  end
+
+  config.vm.provision "shell", inline: \$script, privileged: true
+
+  config.ssh.extra_args = "-tt"
+
+end
+EOF
+```
+
+Однако это тоже не помогло, даже добавило ещё одну проблему - не установлен плагин vagrant-vbguest, попробовал его установить с помощью команды vagrant plugin install vagrant-vbguest
+
+Но и тут не без проблем - оказывается плагины для вагранта недоступны теперь на территории РФ, поэтому пришлось воспользоваться VPN
+
+Плагин установил, но проблема с запуском машины не решилась (даже с впн не запускает)
+Странность ещё в том, что вручную с помощью программы можно создать машину на virtualbox, но через вагрант не получается
+
+Ещё попробовал установить kernel вручную, но это так же не помогло
+
+Пробовал также менять бокс на ubuntu/trusty64 (советы из интернета, но не помогли)
+
+![Снимок экрана от 2022-05-20 23-04-40](https://user-images.githubusercontent.com/90759633/169603009-acb11714-dea5-47ca-8da6-719fbbd14efa.png)
+
+Проблема оказалась в том, что у меня версия ОС Ubuntu 20.04, а у соответствующей версии virtualbox проблемы с совместимостью с этим ОС (разработчики видимо не договорились). Это всё вычитал в интернете в поисках решения проблемы
+
+В теории можно было бы решить проблему, понизив версию Ubuntu, но как сделать это без сноса ОС я не нашёл, поэтому прибегнул к другому варианту
+
+3. Создал с помощью Github Actions yml-файл (vagrant.yml в данном репозитории) и внёс туда все команды, которые я делал в консоли
+```sh
+name: vagrant
+
+on: push
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: vagrant install
+        run: |
+          sudo apt install vagrant
+          vagrant plugin install vagrant-vbguest
+          sudo apt install virtualbox
+      - name: vagrant init
+        run: |
+          vagrant init bento/ubuntu-19.10
+          less Vagrantfile
+          vagrant init -f -m bento/ubuntu-19.10
+      - name: vagrantfile edit
+        run: |
+          mkdir shared
+          cat > Vagrantfile <<EOF
+          \$script = <<-SCRIPT
+          sudo apt install docker.io -y
+          sudo docker pull fastide/ubuntu:19.04
+          sudo docker create -ti --name fastide fastide/ubuntu:19.04 bash
+          sudo docker cp fastide:/home/developer /home/
+          sudo useradd developer
+          sudo usermod -aG sudo developer
+          echo "developer:developer" | sudo chpasswd
+          sudo chown -R developer /home/developer
+          SCRIPT
+          EOF
+          cat >> Vagrantfile <<EOF
+          Vagrant.configure("2") do |config|
+          config.vagrant.plugins = ["vagrant-vbguest"]
+          EOF
+          cat >> Vagrantfile <<EOF
+            config.vm.box = "bento/ubuntu-19.10"
+            config.vm.network "public_network"
+            config.vm.synced_folder('shared', '/vagrant', type: 'rsync')
+          
+            config.vm.provider "virtualbox" do |vb|
+              vb.gui = true
+              vb.memory = "2048"
+            end
+            config.vm.provision "shell", inline: \$script, privileged: true
+            config.ssh.extra_args = "-tt"
+          end
+          EOF
+      - name: vagrant validate
+        run: |
+          vagrant validate
+          vagrant status
+      - name: vagrant up
+        run: |
+          VAGRANT_DETECTED_OS=cygwin
+          vagrant up --provider virtualbox
+          vagrant port
+          vagrant ssh
+      - name: vagrant destroy
+        run: |
+          vagrant destroy --force
+```
+
+4. По итогу прогресс: вагрант смог сертифицировать вагрант файл ($ vagrant validate), однако сама машина хоть и грузится, но не запускается
+
+![Снимок экрана от 2022-05-20 23-19-42](https://user-images.githubusercontent.com/90759633/169604745-1133ab89-9339-4e18-9768-267dfa5fa285.png)
+![Снимок экрана от 2022-05-20 23-20-14](https://user-images.githubusercontent.com/90759633/169604807-28f3c459-0154-4265-93d7-34abd5b58505.png)
+
+Вагрант требует TTY. Я начал искать решение этой проблемы в интернете, по итогу нашёл форум, где всем помогало поставить cygwin, однако мне к сожалению не помогло
+
+```sh
+VAGRANT_DETECTED_OS=cygwin
+```
+
+Я честно пытался решить около недели эту проблему, но по итогу ни к чему не пришёл, хотя всё должно работать
+
+
 ## Laboratory work X
 
 Данная лабораторная работа посвещена изучению процесса создания и конфигурирования виртуальной среды разработки с использованием **Vagrant**
 
-```sh
+```shб
 $ open https://www.vagrantup.com/intro/index.html
 ```
 
