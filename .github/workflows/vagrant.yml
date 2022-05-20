@@ -62,6 +62,8 @@ jobs:
         run: |
           VAGRANT_DETECTED_OS=cygwin
           vagrant up --provider virtualbox
+          vagrant port
+          vagrant ssh
       - name: vagrant destroy
         run: |
           vagrant destroy --force
